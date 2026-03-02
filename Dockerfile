@@ -30,11 +30,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install NCBI Datasets CLI (for download scripts)
-RUN wget -q https://ftp.ncbi.nlm.nih.gov/datasets/docs/v2/datasets-linux-amd64 \
-        -O /usr/local/bin/datasets \
-    && chmod +x /usr/local/bin/datasets
-
 COPY --from=builder /usr/local/bin/cuCLARK        /usr/local/bin/cuCLARK
 COPY --from=builder /usr/local/bin/cuCLARK-l      /usr/local/bin/cuCLARK-l
 COPY --from=builder /usr/local/bin/getTargetsDef  /usr/local/bin/getTargetsDef
