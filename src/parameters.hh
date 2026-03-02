@@ -34,19 +34,25 @@
 
 #define VERSION "1.1"
 
-#define SB              4       
-#define LHTSIZE 	57777779
-#define HTSIZE  	1610612741
+#define SB              4
 #define NBN		1
 #define SFACTORMAX 	30
 
-//// new defines
-#define MAXHITS		15			// maximum number of targets per object, maximum hits in normal test 10M was 10
-#define RESERVED	400000000	// reserverd GPU memory for a batch
-#define OBJECTNAMEMAX	40		// maximum length for object names
-
-#define DBPARTSPERDEVICE 3
+//// variant-specific defines (selected at compile time via -DCUCLARK_LIGHT)
+#ifdef CUCLARK_LIGHT
+  #define HTSIZE          57777779
+  #define MAXHITS         23      // max targets per object (light)
+  #define RESERVED        300000000 // reserved GPU memory per batch (light)
+  #define DBPARTSPERDEVICE 1
+#else
+  #define HTSIZE          1610612741
+  #define MAXHITS         15      // max targets per object (full)
+  #define RESERVED        400000000 // reserved GPU memory per batch (full)
+  #define DBPARTSPERDEVICE 3
+#endif
 ////
+
+#define OBJECTNAMEMAX	40		// maximum length for object names
 
 typedef uint64_t      T64;
 typedef uint32_t      T32;

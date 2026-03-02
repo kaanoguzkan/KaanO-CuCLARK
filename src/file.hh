@@ -30,8 +30,8 @@
 #define FILE_HH
 
 #include<string>
-#include<stdio.h>
-#include<stdint.h>
+#include<cstdio>
+#include<cstdint>
 #include<vector>
 #include "./dataType.hh"
 

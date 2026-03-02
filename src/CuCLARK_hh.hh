@@ -70,7 +70,7 @@ class CuCLARK
 		std::vector< std::vector<size_t> >    	m_readsLength;
 		std::vector< size_t >					m_posReads;
 //// new	
-		vector<bool> 							m_batchScheduled;
+		std::vector<bool> 						m_batchScheduled;
 
 		// Options for loading db				
 		bool					m_isLightLoading;

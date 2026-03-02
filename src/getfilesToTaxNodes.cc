@@ -32,7 +32,7 @@
 #include <cstring>
 #include <iomanip>
 #include <map>
-#include <stdint.h>
+#include <cstdint>
 #include "./file.hh"
 using namespace std;
 

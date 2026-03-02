@@ -31,7 +31,7 @@
 #ifndef DATATYPE_HH
 #define DATATYPE_HH
 
-#include <stdint.h>
+#include <cstdint>
 #include "./parameters.hh"
 #include <iostream>
 typedef uint32_t        ITYPE;

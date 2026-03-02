@@ -136,20 +136,16 @@ CuClarkDB<HKMERr>::CuClarkDB(const size_t _numDevices, const uint8_t _k, const s
 		m_numDevices = _numDevices;
 	}
 	
-	for(int i=0; i<m_numDevices; i++)
-	{
-		if(strcmp(prop[i].name,"GeForce GTX TITAN X") == 0)
-			m_dbPartsPerDevice = DBPARTSPERDEVICE;
-	}
-	
+	m_dbPartsPerDevice = DBPARTSPERDEVICE;
+
 	std::vector<int>	gpuid(m_numDevices);
 	int gpu_count = 0;
 	m_memSizes.resize(m_numDevices*m_dbPartsPerDevice);
-	
+
 	for(int i=0; i<m_numDevices; i++)
 	{
-		// locate devices capable of Peer-to-Peer
-		if(prop[i].major >= 2)
+		// locate devices capable of Peer-to-Peer (requires compute capability >= 7.0 / Volta)
+		if(prop[i].major >= 7)
 		{
 			gpuid[gpu_count++] = i;
 			//~ std::cerr << "Device " << i << " = " << prop[i].name << " is capable of P2P.\n";

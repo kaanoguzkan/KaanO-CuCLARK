@@ -31,7 +31,7 @@
 #include <vector>
 #include <cstring>
 #include <iomanip>
-#include <stdint.h>
+#include <cstdint>
 #include "./file.hh"
 #include <map>
 using namespace std;

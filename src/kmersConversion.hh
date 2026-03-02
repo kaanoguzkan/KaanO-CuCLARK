@@ -30,7 +30,7 @@
 #define KMERSCONVERSION_HH
 
 #include<string>
-#include<stdint.h>
+#include<cstdint>
 
 //      FUNCTION
 //      Name: getReverseComplement

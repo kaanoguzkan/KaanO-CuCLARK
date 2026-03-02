@@ -32,10 +32,9 @@
 #define HASHTABLE_HH
 
 #include<vector>
-#include<stdint.h>
+#include<cstdint>
 #include<string>
 #include "./dataType.hh"
-#include "stdint.h"
 
 template <typename HKMERr, typename ELMTr> struct htCell
 {

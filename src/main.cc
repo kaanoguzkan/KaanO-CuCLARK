@@ -30,7 +30,7 @@
 
 #include<iostream>
 #include<cstdlib>
-#include<stdio.h>
+#include<cstdio>
 #include<cmath>
 #include<fstream>
 
@@ -238,19 +238,19 @@ int main(int argc, char** argv)
 		exit(1);
 	}
 	
-	if (HTSIZE == LHTSIZE)
+#ifdef CUCLARK_LIGHT
 	{	// CuCLARK-l
-		cLightDB = true; 
+		cLightDB = true;
 		if (iterKmers == 0)
-		{ 	iterKmers = 4 ;}
-	 	k = 27;
-		if (cLightDB)
-		{	sfactor = 1;}
+		{	iterKmers = 4;}
+		k = 27;
+		sfactor = 1;
 	}
-	else
+#else
 	{
 		iterKmers = 0;
 	}
+#endif
 	if (k == 0) // should never occur because of the code above
 	{
 		cerr << "Please specify a k-mers length: -k <integer>" << endl;

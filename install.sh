@@ -29,4 +29,7 @@
 
 echo "Installing cuCLARK, cuCLARK-l and programs for target definition in folder ./exe/"
 echo ""
-make
+cmake -B build -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_CUDA_ARCHITECTURES="70;75;80;86;89;90"
+cmake --build build -j$(nproc)
+cmake --install build --prefix .
