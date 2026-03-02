@@ -231,11 +231,11 @@ CuCLARK<HKMERr>::CuCLARK(const size_t& 	_kmerLength,
 		const size_t&		_numBatches,
 		const size_t&		_numDevices
 		): 
-	m_nbCPU(_nbCPU), 
+	m_nbCPU(_nbCPU),
 	m_kmerSize(_kmerLength), m_k((uint8_t) _kmerLength),
 	m_nbObjects(0),
-	m_folder(_folderName), 
-	m_minCountTarget(_minCountT), 
+	m_folder(_folderName),
+	m_minCountTarget(_minCountT),
 	m_powerTable(m_kmerSize),
 	m_isFastaFile(true),
 	m_iterKmers(_iterKmers),
@@ -243,7 +243,9 @@ CuCLARK<HKMERr>::CuCLARK(const size_t& 	_kmerLength,
 	m_posReads(_nbCPU),
 	m_isPaired(false),
 	m_numBatches(_numBatches),
-	m_numDevices(_numDevices)
+	m_numDevices(_numDevices),
+	m_fullResults(nullptr),
+	m_finalResults(nullptr)
 {
 
 #ifdef _OPENMP

@@ -283,8 +283,8 @@ void CuClarkDB<HKMERr>::freeBatchMemory()
 		CUERR
 	}
 	
-	cudaFreeHost(h_results[0]);
-	cudaFreeHost(h_resultsFinal[0]);
+	if (h_results[0] != nullptr) cudaFreeHost(h_results[0]);
+	if (h_resultsFinal[0] != nullptr) cudaFreeHost(h_resultsFinal[0]);
 	CUERR
 	
 	for(int i=0; i<m_numDevices; i++)
