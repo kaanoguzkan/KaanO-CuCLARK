@@ -1,6 +1,6 @@
 # CuCLARK
 
-## v2.0 Updates (alkanlab)
+## v2.0 Updates 
 
 Modernized fork by Sırrı Kaan Oğuzkan — Docker support, a unified CLI wrapper, and broad GPU compatibility.
 
