@@ -1,6 +1,20 @@
 services:
-  cuclark:
-    build: .
+  rica_s_id_cuclark:
+    container_name: rica_s_id_cuclark
+    entrypoint:
+      - /bin/bash
+    hostname: rica_s_id_cuclark
+    image: alkanlab/cuclark:2.0
+    ipc: private
+    logging:
+      driver: json-file
+      options: {}
+    networks:
+      - rica_s_net
+    stdin_open: true
+    tty: true
+    volumes:
+      - /home/ricardo/projects/rica_s:/rica_s
     deploy:
       resources:
         reservations:
@@ -8,5 +22,7 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    volumes:
-      - ./data:/data
+
+networks:
+  rica_s_net:
+    external: true

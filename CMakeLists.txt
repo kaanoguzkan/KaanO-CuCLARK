@@ -7,9 +7,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 
-# GPU architectures: Volta (70), Turing (75), Ampere (80,86), Ada (89), Hopper (90)
+# GPU architectures (sm_70+ required for warp intrinsics):
+#   70=Volta/V100  72=Jetson Xavier  75=Turing/RTX20xx  80=Ampere/A100
+#   86=RTX30xx     87=Jetson Orin    89=Ada/RTX40xx     90=Hopper/H100
 if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
-    set(CMAKE_CUDA_ARCHITECTURES "70;75;80;86;89;90")
+    set(CMAKE_CUDA_ARCHITECTURES "70;72;75;80;86;87;89;90")
 endif()
 
 # CUDA toolkit (needed to expose cuda_runtime.h to C++ host files)
@@ -78,3 +80,4 @@ target_compile_options(getfilesToTaxNodes PRIVATE -O3)
 install(TARGETS cuCLARK cuCLARK-l getTargetsDef getAccssnTaxID getfilesToTaxNodes
     RUNTIME DESTINATION exe
 )
+install(PROGRAMS scripts/cuclark DESTINATION bin)

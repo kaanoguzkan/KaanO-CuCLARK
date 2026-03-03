@@ -24,12 +24,15 @@
 
 #
 #   install.sh: Install cuCLARK and cuCLARK-l,
-#		also programs for target definition
-#		in folder ./exe/
+#		also programs for target definition.
 
-echo "Installing cuCLARK, cuCLARK-l and programs for target definition in folder ./exe/"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+echo "Installing cuCLARK, cuCLARK-l and programs for target definition..."
 echo ""
+cd "$PROJECT_DIR"
 cmake -B build -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_CUDA_ARCHITECTURES="70;75;80;86;89;90"
+      -DCMAKE_CUDA_ARCHITECTURES="70;72;75;80;86;87;89;90"
 cmake --build build -j$(nproc)
 cmake --install build --prefix .

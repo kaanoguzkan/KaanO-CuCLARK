@@ -14,7 +14,7 @@ WORKDIR /cuclark
 COPY . .
 
 RUN cmake -B build -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_CUDA_ARCHITECTURES="70;75;80;86;89;90" \
+        -DCMAKE_CUDA_ARCHITECTURES="70;72;75;80;86;87;89;90" \
     && cmake --build build -j$(nproc) \
     && cmake --install build --prefix /usr/local
 
@@ -39,8 +39,15 @@ COPY --from=builder /usr/local/exe/getTargetsDef  /usr/local/bin/getTargetsDef
 COPY --from=builder /usr/local/exe/getAccssnTaxID /usr/local/bin/getAccssnTaxID
 COPY --from=builder /usr/local/exe/getfilesToTaxNodes /usr/local/bin/getfilesToTaxNodes
 
-COPY *.sh /opt/cuclark/scripts/
-RUN chmod +x /opt/cuclark/scripts/*.sh
+COPY scripts/ /opt/cuclark/scripts/
+COPY mwe/ /opt/cuclark/mwe/
+
+# Fix Windows line endings and set permissions
+RUN sed -i 's/\r$//' /opt/cuclark/scripts/* /opt/cuclark/mwe/* \
+    && chmod +x /opt/cuclark/scripts/* /opt/cuclark/mwe/*.sh
+
+# Add shell scripts to PATH so wrapper can find them
+ENV PATH="/opt/cuclark/scripts:${PATH}"
 
 WORKDIR /data
-ENTRYPOINT ["/usr/local/bin/cuCLARK"]
+ENTRYPOINT ["cuclark"]

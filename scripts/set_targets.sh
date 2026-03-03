@@ -3,7 +3,7 @@
 #
 #   cuCLARK, CLARK for CUDA-enabled GPUs.
 #   Copyright 2016, Robin Kobus <rkobus@students.uni-mainz.de>
-#   
+#
 #   based on CLARK version 1.1.3, CLAssifier based on Reduced K-mers.
 #   Copyright 2013-2016, Rachid Ounit <rouni001@cs.ucr.edu>
 #
@@ -28,6 +28,8 @@
 #   Differences to CLARK:
 #   Changed subDB folder name to avoid confusion of CLARK's and cuCLARK's databases.
 #
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 if [ $# -lt 2 ]; then
 
@@ -95,7 +97,7 @@ do
 		PRE=`echo $db | cut -c1-2`
 		if [ "$PRE" != "--" ]; then
 			echo -n "Collecting metadata of $db... "
-			./make_metadata.sh $db $DBDR
+			"$SCRIPT_DIR/make_metadata.sh" $db $DBDR
 			if [ ! -s $DBDR/.$db ]; then
 				exit
 			fi
@@ -104,7 +106,7 @@ do
 			fi
 			echo "done."
 			if [ -s $DBDR/.$db.fileToTaxIDs ]; then 
-				./exe/getTargetsDef $DBDR/.$db.fileToTaxIDs $RANK >> $DBDR/targets.txt 
+				getTargetsDef $DBDR/.$db.fileToTaxIDs $RANK >> $DBDR/targets.txt 
 				subDB="$subDB$db$us"
 				cat files_excluded.txt >> $DBDR/.tmp
 				rm files_excluded.txt
