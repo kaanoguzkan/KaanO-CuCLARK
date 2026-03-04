@@ -27,11 +27,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         wget \
         gawk \
         gzip \
+        unzip \
+        jq \
         coreutils \
         ca-certificates \
         libgomp1 \
         python3 \
     && rm -rf /var/lib/apt/lists/*
+
+# Install NCBI Datasets CLI
+RUN wget -q https://ftp.ncbi.nlm.nih.gov/pub/datasets/command-line/v2/linux-amd64/datasets \
+        -O /usr/local/bin/datasets \
+    && wget -q https://ftp.ncbi.nlm.nih.gov/pub/datasets/command-line/v2/linux-amd64/dataformat \
+        -O /usr/local/bin/dataformat \
+    && chmod +x /usr/local/bin/datasets /usr/local/bin/dataformat
 
 COPY --from=builder /usr/local/exe/cuCLARK        /usr/local/bin/cuCLARK
 COPY --from=builder /usr/local/exe/cuCLARK-l      /usr/local/bin/cuCLARK-l
