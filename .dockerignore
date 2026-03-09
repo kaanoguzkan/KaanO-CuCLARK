@@ -3,3 +3,6 @@ exe/
 data/
 .git/
 *.o
+*.fasta
+*.fna
+*.fastq

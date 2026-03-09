@@ -1,35 +1,31 @@
 # CuCLARK
 
-## v2.0 Updates 
+GPU-accelerated metagenomic classifier based on [CLARK](http://clark.cs.ucr.edu/), using CUDA.
 
-Modernized fork by Sırrı Kaan Oğuzkan — Docker support, a unified CLI wrapper, and broad GPU compatibility.
+Comes in two variants:
+- **cuCLARK** — full mode, needs large RAM and VRAM for big databases (e.g. all NCBI bacteria)
+- **cuCLARK-l** — light mode, runs with 4 GB RAM and 1 GB VRAM
 
-### What's new
-
-- **CMake build system** — replaces the old Makefile, supports CUDA architectures sm_70 through sm_90 (Volta, Turing, Ampere, Ada, Hopper, Jetson Xavier/Orin)
-- **C++17 modernization** — `std::vector`, `std::string`, `std::unique_ptr`, CUDA RAII wrappers, no more `using namespace std`
-- **Docker image** — multi-stage build on CUDA 12.4, available as `alkanlab/cuclark:2.0`
-- **Python CLI wrapper** (`cuclark`) — unified interface with GPU auto-detection, VRAM-based variant selection, and result summarization
-- **Fixed NCBI scripts** — FTP URLs updated to HTTPS, broken download paths fixed
-- **Minimum working example** — self-contained demo that downloads viral genomes and runs classification
-
-### Quick start (Docker)
+## Quick start (Docker)
 
 ```bash
-# Check GPU detection
-docker run --rm --gpus all alkanlab/cuclark:2.0 version
+# Build
+docker build -t cuclark .
 
-# Run the demo
-docker run --rm --gpus all -v ./data:/data alkanlab/cuclark:2.0 \
-  bash -c "bash /opt/cuclark/mwe/run_mwe.sh /data/mwe"
+# Run the MWE test (needs --entrypoint since image entrypoint is cuclark)
+docker run --gpus all --entrypoint bash -v ${PWD}:/data cuclark \
+  /opt/cuclark/mwe/test_example_fasta.sh
 
-# Classify your reads
-docker run --rm --gpus all -v ./data:/data alkanlab/cuclark:2.0 \
+# Interactive shell inside the container
+docker run --gpus all --entrypoint bash -it -v ${PWD}:/data cuclark
+
+# Classify reads directly
+docker run --gpus all -v ${PWD}:/data cuclark \
   classify --reads /data/reads.fa --targets /data/targets.txt \
   --db-dir /data/db/ --output /data/results
 
 # View results
-docker run --rm -v ./data:/data alkanlab/cuclark:2.0 \
+docker run --gpus all -v ${PWD}:/data cuclark \
   summary /data/results.csv
 ```
 
@@ -38,7 +34,7 @@ docker run --rm -v ./data:/data alkanlab/cuclark:2.0 \
 | Command | Description |
 |---------|-------------|
 | `cuclark classify` | Run classification with GPU auto-tuning |
-| `cuclark summary` | Parse results — top taxa, confidence stats, Krona export |
+| `cuclark summary` | Parse results — top taxa, confidence stats |
 | `cuclark download` | Download genomes from NCBI |
 | `cuclark setup-db` | Build target database |
 | `cuclark list-db` | Inspect available databases |
@@ -46,13 +42,29 @@ docker run --rm -v ./data:/data alkanlab/cuclark:2.0 \
 
 ### GPU compatibility
 
-Works on any NVIDIA GPU with compute capability 7.0+ (2017 onwards), including Jetson Xavier (sm_72) and Jetson Orin (sm_87).
+Requires NVIDIA GPU with compute capability 7.0+ (Volta and newer). Tested architectures: sm_70 through sm_90.
 
-### Setup guide
+### Building from source
 
-See [SETUP.md](SETUP.md) for full installation and usage instructions.
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_ARCHITECTURES="70;75;80;86;89;90"
+cmake --build build -j$(nproc)
+```
+
+### Authors
+
+- **v2.0** — Sırrı Kaan Oğuzkan (Docker, CMake, CLI wrapper, GPU compatibility)
+- **v1.0** — Robin Kobus, JGU Mainz ([paper](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-016-1434-6))
+- **CLARK** — Rachid Ounit, UC Riverside
+
+### License
+
+GNU General Public License v3. See [LICENSE_GNU_GPL.txt](LICENSE_GNU_GPL.txt).
 
 ---
+
+# Original CuCLARK Documentation
 
 ABOUT
 -----
