@@ -54,7 +54,6 @@ cmake --build build -j$(nproc)
 
 ### Authors
 
-- **v2.0** — Sırrı Kaan Oğuzkan (Docker, CMake, CLI wrapper, GPU compatibility)
 - **v1.0** — Robin Kobus, JGU Mainz ([paper](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/s12859-016-1434-6))
 - **CLARK** — Rachid Ounit, UC Riverside
 
