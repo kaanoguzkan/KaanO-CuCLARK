@@ -54,6 +54,32 @@ def usable_gpus(gpus, min_free_mb=1024):
     return [g for g in gpus if g["mem_free"] >= min_free_mb]
 
 
+# ── RAM detection ─────────────────────────────────────────────────────────
+
+def detect_available_ram_mb():
+    """Detect available system RAM in MB. Returns int or None on failure."""
+    # Linux: read /proc/meminfo
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemAvailable:"):
+                    kb = int(line.split()[1])
+                    return kb // 1024
+    except (FileNotFoundError, ValueError, IndexError):
+        pass
+    # macOS: use sysctl (reports total, not available — best effort)
+    try:
+        result = subprocess.run(
+            ["sysctl", "-n", "hw.memsize"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            return int(result.stdout.strip()) // (1024 * 1024)
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+        pass
+    return None
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 def find_binary(name):
@@ -109,23 +135,24 @@ def translate_exit_code(exit_code, stderr_text, batches):
 
 # ── Subcommand: classify ──────────────────────────────────────────────────
 
-def auto_select_variant(usable):
-    """Auto-select cuCLARK vs cuCLARK-l based on available VRAM.
+def auto_select_variant(usable, available_ram_mb=None):
+    """Auto-select cuCLARK vs cuCLARK-l based on available RAM and VRAM.
 
-    Thresholds (per GPU, based on parameters.hh RESERVED constants):
-      - cuCLARK (full):   needs ~400MB reserved + DB. Use when >= 8GB free.
-      - cuCLARK-l (light): needs ~300MB reserved + smaller DB. Use when < 8GB free.
+    Primary factor is system RAM (full mode needs ~146 GB to build DB,
+    ~40 GB to classify). VRAM only affects swap cycle count, not correctness.
     """
+    # Primary check: system RAM
+    if available_ram_mb is not None and available_ram_mb < 150000:
+        return "light", f"auto (available RAM {available_ram_mb} MB < 150 GB)"
+    if available_ram_mb is not None:
+        return "full", f"auto (available RAM {available_ram_mb} MB >= 150 GB)"
+    # Fallback: if RAM detection failed, use VRAM as heuristic
     if not usable:
-        return "light"  # safe default when we can't detect
+        return "light", "auto (could not detect RAM or VRAM)"
     min_free = min(g["mem_free"] for g in usable)
-    # 8GB threshold: full mode needs substantially more VRAM for the larger hash table
     if min_free >= 8192:
-        return "full"
-    elif min_free >= 2048:
-        return "light"
-    else:
-        return "light"
+        return "full", f"auto (RAM unknown, VRAM {min_free} MB >= 8 GB)"
+    return "light", f"auto (RAM unknown, VRAM {min_free} MB < 8 GB)"
 
 
 def cmd_classify(args):
@@ -143,7 +170,8 @@ def cmd_classify(args):
         else:
             error("No GPUs detected. Set --devices manually or ensure nvidia-docker is configured.")
 
-    # Auto-select variant based on VRAM (unless user forced --light or --full)
+    # Auto-select variant based on RAM and VRAM (unless user forced --light or --full)
+    available_ram = detect_available_ram_mb()
     if args.light:
         light = True
         variant_reason = "user requested"
@@ -151,13 +179,8 @@ def cmd_classify(args):
         light = False
         variant_reason = "user requested"
     else:
-        selected = auto_select_variant(usable)
+        selected, variant_reason = auto_select_variant(usable, available_ram)
         light = (selected == "light")
-        min_free = min(g["mem_free"] for g in usable) if usable else 0
-        if light:
-            variant_reason = f"auto (min VRAM {min_free} MB < 8192 MB)"
-        else:
-            variant_reason = f"auto (min VRAM {min_free} MB >= 8192 MB)"
 
     binary_name = "cuCLARK-l" if light else "cuCLARK"
     binary = find_binary(binary_name)
@@ -191,9 +214,11 @@ def cmd_classify(args):
         cmd.append("--tsk")
 
     # Pre-run summary
+    ram_str = f"{available_ram} MB" if available_ram is not None else "unknown"
     summary_lines = [
         f"cuCLARK {'light ' if light else ''}classification",
         f"Variant:   {binary_name} ({variant_reason})",
+        f"RAM:       {ram_str} available",
         f"GPUs:      {devices} device(s)" + (f", min {min(g['mem_free'] for g in usable)} MB free VRAM" if usable else ""),
     ]
     for g in usable[:devices]:
