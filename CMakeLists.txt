@@ -30,31 +30,6 @@ set(CUCLARK_SOURCES
     src/kmersConversion.cc
 )
 
-# ------------------------------------------------------------------
-# Custom HTSIZE / DBPARTSPERDEVICE (override any variant's defaults)
-#
-# Formula:  HTSIZE = largest_prime_below( (RAM_GB - 4) * 1e9 / 24 )
-#
-# Example:  cmake -DCUCLARK_HTSIZE=666666671 -DCUCLARK_DBPARTS=2
-#
-# Recommended primes by RAM:
-#    8 GB →  104395303      32 GB →  666666671
-#   16 GB →  268435399      48 GB →  999999937
-#   64 GB → 1249999993     128 GB → 1610612741 (default full)
-# ------------------------------------------------------------------
-set(CUCLARK_HTSIZE "" CACHE STRING "Custom HTSIZE (prime). Overrides variant default. See formula above.")
-set(CUCLARK_DBPARTS "" CACHE STRING "Custom DBPARTSPERDEVICE. Overrides variant default.")
-
-# Helper: apply custom HTSIZE/DBPARTS to a target
-function(cuclark_apply_custom_defines target)
-    if(CUCLARK_HTSIZE)
-        target_compile_definitions(${target} PRIVATE HTSIZE=${CUCLARK_HTSIZE})
-    endif()
-    if(CUCLARK_DBPARTS)
-        target_compile_definitions(${target} PRIVATE DBPARTSPERDEVICE=${CUCLARK_DBPARTS})
-    endif()
-endfunction()
-
 # Helper: configure a cuCLARK variant target
 function(cuclark_add_variant target)
     add_executable(${target} ${CUCLARK_SOURCES})
@@ -69,19 +44,12 @@ function(cuclark_add_variant target)
             $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fopenmp>
         )
     endif()
-    cuclark_apply_custom_defines(${target})
 endfunction()
 
 # ------------------------------------------------------------------
 # cuCLARK — full variant (HTSIZE=1.6B, ~38 GB RAM, 3 DB parts/device)
 # ------------------------------------------------------------------
 cuclark_add_variant(cuCLARK)
-
-# ------------------------------------------------------------------
-# cuCLARK-m — medium variant (HTSIZE=104M, ~2.5 GB RAM, 1 DB part/device)
-# ------------------------------------------------------------------
-cuclark_add_variant(cuCLARK-m)
-target_compile_definitions(cuCLARK-m PRIVATE CUCLARK_MEDIUM)
 
 # ------------------------------------------------------------------
 # cuCLARK-l — light variant (HTSIZE=58M, ~1.4 GB RAM, 1 DB part/device)
@@ -104,7 +72,7 @@ target_compile_options(getfilesToTaxNodes PRIVATE -O3)
 # ------------------------------------------------------------------
 # Install — copies binaries to exe/ to preserve backward compatibility
 # ------------------------------------------------------------------
-install(TARGETS cuCLARK cuCLARK-m cuCLARK-l getTargetsDef getAccssnTaxID getfilesToTaxNodes
+install(TARGETS cuCLARK cuCLARK-l getTargetsDef getAccssnTaxID getfilesToTaxNodes
     RUNTIME DESTINATION exe
 )
 install(PROGRAMS scripts/cuclark DESTINATION bin)

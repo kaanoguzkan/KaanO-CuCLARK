@@ -262,16 +262,10 @@ echo "[5/6] Running cuCLARK classification..."
 #   Hash table alloc = HTSIZE × 24 bytes
 #   Max k-mer length = floor(log4(HTSIZE)) + 16
 #
-#   RAM (GB) | HTSIZE (prime)  | HT alloc | Max k | Variant
-#   ---------|-----------------|----------|-------|--------
-#     8      |   104,395,303   |  2.5 GB  |  29   | cuCLARK-m (default)
-#    16      |   268,435,399   |  6.4 GB  |  30   | custom build
-#    32      |   666,666,671   | 16.0 GB  |  31   | custom build
-#    48      |   999,999,937   | 24.0 GB  |  31   | custom build
-#    64      | 1,249,999,993   | 30.0 GB  |  31   | custom build
-#   128      | 1,610,612,741   | 38.6 GB  |  31   | cuCLARK (default)
-#
-# Custom build: cmake -DCUCLARK_HTSIZE=666666671 -DCUCLARK_DBPARTS=2
+#   Variant      | HTSIZE (prime)  | HT alloc | Max k | Min RAM
+#   -------------|-----------------|----------|-------|--------
+#   cuCLARK-l    |    57,777,779   |  1.4 GB  |  27   |   4 GB
+#   cuCLARK      | 1,610,612,741   | 38.6 GB  |  31   |  48 GB
 #
 # VRAM formula:
 #   VRAM per batch ≈ DB_size / num_batches + RESERVED (300-400 MB)
@@ -297,10 +291,6 @@ if [ "$RAM_GB" -ge 48 ] && command -v cuCLARK &>/dev/null; then
 	VARIANT="cuCLARK"
 	LABEL="full"
 	RESERVED_MB=400
-elif command -v cuCLARK-m &>/dev/null && [ "$RAM_GB" -ge 8 ]; then
-	VARIANT="cuCLARK-m"
-	LABEL="medium"
-	RESERVED_MB=300
 elif command -v cuCLARK-l &>/dev/null; then
 	VARIANT="cuCLARK-l"
 	LABEL="light"

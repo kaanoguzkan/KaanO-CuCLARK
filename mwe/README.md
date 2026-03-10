@@ -1,47 +1,38 @@
 # CuCLARK MWE — FASTA Test
 
-Tests the CuCLARK pipeline by classifying simulated reads from a FASTA file against viral reference genomes.
+Self-contained test that downloads a bacterial FASTA, extracts targets, generates reads, and classifies them with cuCLARK.
 
 ## What it does
 
-1. Validates FASTA format (header, characters, N-content)
-2. Generates 200 simulated reads (150bp) from informative regions
-3. Downloads 3 small viral genomes (phiX174, Lambda, T4) from NCBI
-4. Copies the input FASTA as a self-classification target
-5. Runs cuCLARK classification
-6. Prints a results summary with a sanity check
+1. Downloads `uniques.fasta` (5.1 GB, 35K bacterial sequences) from the test server
+2. Validates FASTA format (header, characters, N-content)
+3. Generates simulated reads (150 bp) from informative regions
+4. Extracts N target genomes from the input FASTA as classification references
+5. Auto-detects RAM/VRAM — selects cuCLARK (≥48 GB RAM) or cuCLARK-l (<48 GB)
+6. Classifies reads on GPU and prints results summary
 
 ## Usage
 
 ```bash
-# Inside the Docker container
-bash /opt/cuclark/mwe/test_example_fasta.sh [DATA_DIR] [INPUT_FASTA]
+# Build and run (default: 5 targets, 200 reads)
+docker build -t cuclark .
+docker run --gpus all --entrypoint bash -v ${PWD}:/data cuclark \
+  /opt/cuclark/mwe/test_example_fasta.sh
 
-# Defaults: DATA_DIR=/data/test_example, INPUT_FASTA=example.fasta
-```
-
-### With Docker directly
-
-```bash
-docker run --gpus all -v ${PWD}:/data cuclark \
-  bash /opt/cuclark/mwe/test_example_fasta.sh
-```
-
-### With Docker Compose
-
-```bash
-docker compose up -d
-docker exec -it rica_s_id_cuclark bash
-bash /opt/cuclark/mwe/test_example_fasta.sh
+# Custom target/read count
+docker run --gpus all --entrypoint bash \
+  -e NUM_TARGETS=100 -e NUM_READS=5000 \
+  -v ${PWD}:/data cuclark /opt/cuclark/mwe/test_example_fasta.sh
 ```
 
 ## Expected output
 
-All 200 reads should classify as the input target with confidence 1.0:
+Reads should classify against extracted targets with high confidence:
 
 ```
   Total reads:    200
-  Classified:     200
-  Sanity check: 200 reads classified as human_chr1
-  PASS: Reads from human chr1 are being classified back to human_chr1
+  Classified:     200 (100.0%)
+  Unclassified:   0 (0.0%)
+  Confidence ≥0.90: 200
+  PASS: Reads are being classified against extracted targets
 ```
