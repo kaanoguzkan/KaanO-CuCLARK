@@ -21,7 +21,7 @@ find_package(CUDAToolkit REQUIRED)
 # OpenMP is optional: detected at configure time
 find_package(OpenMP)
 
-# Source files shared by both classifier variants
+# Source files shared by all classifier variants
 set(CUCLARK_SOURCES
     src/CuClarkDB.cu
     src/main.cc
@@ -31,37 +31,63 @@ set(CUCLARK_SOURCES
 )
 
 # ------------------------------------------------------------------
-# cuCLARK — full variant (large hash table, 3 DB parts per device)
+# Custom HTSIZE / DBPARTSPERDEVICE (override any variant's defaults)
+#
+# Formula:  HTSIZE = largest_prime_below( (RAM_GB - 4) * 1e9 / 24 )
+#
+# Example:  cmake -DCUCLARK_HTSIZE=666666671 -DCUCLARK_DBPARTS=2
+#
+# Recommended primes by RAM:
+#    8 GB →  104395303      32 GB →  666666671
+#   16 GB →  268435399      48 GB →  999999937
+#   64 GB → 1249999993     128 GB → 1610612741 (default full)
 # ------------------------------------------------------------------
-add_executable(cuCLARK ${CUCLARK_SOURCES})
-target_include_directories(cuCLARK PRIVATE ${CUDAToolkit_INCLUDE_DIRS})
-target_compile_options(cuCLARK PRIVATE
-    $<$<COMPILE_LANGUAGE:CXX>:-O3>
-    $<$<COMPILE_LANGUAGE:CUDA>:-O3>
-)
-if(OpenMP_CXX_FOUND)
-    target_link_libraries(cuCLARK PRIVATE OpenMP::OpenMP_CXX)
-    target_compile_options(cuCLARK PRIVATE
-        $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fopenmp>
+set(CUCLARK_HTSIZE "" CACHE STRING "Custom HTSIZE (prime). Overrides variant default. See formula above.")
+set(CUCLARK_DBPARTS "" CACHE STRING "Custom DBPARTSPERDEVICE. Overrides variant default.")
+
+# Helper: apply custom HTSIZE/DBPARTS to a target
+function(cuclark_apply_custom_defines target)
+    if(CUCLARK_HTSIZE)
+        target_compile_definitions(${target} PRIVATE HTSIZE=${CUCLARK_HTSIZE})
+    endif()
+    if(CUCLARK_DBPARTS)
+        target_compile_definitions(${target} PRIVATE DBPARTSPERDEVICE=${CUCLARK_DBPARTS})
+    endif()
+endfunction()
+
+# Helper: configure a cuCLARK variant target
+function(cuclark_add_variant target)
+    add_executable(${target} ${CUCLARK_SOURCES})
+    target_include_directories(${target} PRIVATE ${CUDAToolkit_INCLUDE_DIRS})
+    target_compile_options(${target} PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:-O3>
+        $<$<COMPILE_LANGUAGE:CUDA>:-O3>
     )
-endif()
+    if(OpenMP_CXX_FOUND)
+        target_link_libraries(${target} PRIVATE OpenMP::OpenMP_CXX)
+        target_compile_options(${target} PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fopenmp>
+        )
+    endif()
+    cuclark_apply_custom_defines(${target})
+endfunction()
 
 # ------------------------------------------------------------------
-# cuCLARK-l — light variant (small hash table, 1 DB part per device)
+# cuCLARK — full variant (HTSIZE=1.6B, ~38 GB RAM, 3 DB parts/device)
 # ------------------------------------------------------------------
-add_executable(cuCLARK-l ${CUCLARK_SOURCES})
+cuclark_add_variant(cuCLARK)
+
+# ------------------------------------------------------------------
+# cuCLARK-m — medium variant (HTSIZE=104M, ~2.5 GB RAM, 1 DB part/device)
+# ------------------------------------------------------------------
+cuclark_add_variant(cuCLARK-m)
+target_compile_definitions(cuCLARK-m PRIVATE CUCLARK_MEDIUM)
+
+# ------------------------------------------------------------------
+# cuCLARK-l — light variant (HTSIZE=58M, ~1.4 GB RAM, 1 DB part/device)
+# ------------------------------------------------------------------
+cuclark_add_variant(cuCLARK-l)
 target_compile_definitions(cuCLARK-l PRIVATE CUCLARK_LIGHT)
-target_include_directories(cuCLARK-l PRIVATE ${CUDAToolkit_INCLUDE_DIRS})
-target_compile_options(cuCLARK-l PRIVATE
-    $<$<COMPILE_LANGUAGE:CXX>:-O3>
-    $<$<COMPILE_LANGUAGE:CUDA>:-O3>
-)
-if(OpenMP_CXX_FOUND)
-    target_link_libraries(cuCLARK-l PRIVATE OpenMP::OpenMP_CXX)
-    target_compile_options(cuCLARK-l PRIVATE
-        $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fopenmp>
-    )
-endif()
 
 # ------------------------------------------------------------------
 # Helper tools (host C++ only — no CUDA required)
@@ -78,7 +104,7 @@ target_compile_options(getfilesToTaxNodes PRIVATE -O3)
 # ------------------------------------------------------------------
 # Install — copies binaries to exe/ to preserve backward compatibility
 # ------------------------------------------------------------------
-install(TARGETS cuCLARK cuCLARK-l getTargetsDef getAccssnTaxID getfilesToTaxNodes
+install(TARGETS cuCLARK cuCLARK-m cuCLARK-l getTargetsDef getAccssnTaxID getfilesToTaxNodes
     RUNTIME DESTINATION exe
 )
 install(PROGRAMS scripts/cuclark DESTINATION bin)

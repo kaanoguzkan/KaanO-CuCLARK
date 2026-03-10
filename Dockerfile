@@ -13,8 +13,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /cuclark
 COPY . .
 
+# Custom HTSIZE: docker build --build-arg CUCLARK_HTSIZE=666666671 .
+# See src/parameters.hh for the formula and recommended primes by RAM.
+ARG CUCLARK_HTSIZE=""
+ARG CUCLARK_DBPARTS=""
+
 RUN cmake -B build -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_CUDA_ARCHITECTURES="70;72;75;80;86;87;89;90" \
+        ${CUCLARK_HTSIZE:+-DCUCLARK_HTSIZE=$CUCLARK_HTSIZE} \
+        ${CUCLARK_DBPARTS:+-DCUCLARK_DBPARTS=$CUCLARK_DBPARTS} \
     && cmake --build build -j$(nproc) \
     && cmake --install build --prefix /usr/local
 
@@ -43,6 +50,7 @@ RUN wget -q https://ftp.ncbi.nlm.nih.gov/pub/datasets/command-line/v2/linux-amd6
     && chmod +x /usr/local/bin/datasets /usr/local/bin/dataformat
 
 COPY --from=builder /usr/local/exe/cuCLARK        /usr/local/bin/cuCLARK
+COPY --from=builder /usr/local/exe/cuCLARK-m      /usr/local/bin/cuCLARK-m
 COPY --from=builder /usr/local/exe/cuCLARK-l      /usr/local/bin/cuCLARK-l
 COPY --from=builder /usr/local/exe/getTargetsDef  /usr/local/bin/getTargetsDef
 COPY --from=builder /usr/local/exe/getAccssnTaxID /usr/local/bin/getAccssnTaxID

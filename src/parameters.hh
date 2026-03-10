@@ -38,17 +38,56 @@
 #define NBN		1
 #define SFACTORMAX 	30
 
-//// variant-specific defines (selected at compile time via -DCUCLARK_LIGHT)
+////
+// Variant-specific defines (selected at compile time)
+//
+// HTSIZE formula — pick the largest prime that fits your RAM:
+//   HTSIZE = largest_prime_below( (RAM_GB - 4) * 1e9 / 24 )
+//
+//   RAM (GB) | HTSIZE (prime)  | Hash table alloc | Max k (32-bit key)
+//   ---------|-----------------|------------------|-------------------
+//     8      |   104,395,303   |   ~2.5 GB        | k ≤ 29
+//    16      |   268,435,399   |   ~6.4 GB        | k ≤ 30
+//    32      |   666,666,671   |  ~16.0 GB        | k ≤ 31
+//    48      |   999,999,937   |  ~24.0 GB        | k ≤ 31
+//    64      | 1,249,999,993   |  ~30.0 GB        | k ≤ 31
+//   128      | 1,610,612,741   |  ~38.6 GB        | k ≤ 31
+//
+// Override at compile time: cmake -DCUCLARK_HTSIZE=666666671
+//
+// Max supported k-mer length = floor(log4(HTSIZE)) + 16
+// HTSIZE must be prime for good hash distribution.
+//
+// DBPARTSPERDEVICE: how many DB chunks per GPU (more = less VRAM per chunk)
+//   Rule of thumb: ceil(HTSIZE * 24 / (VRAM_bytes - RESERVED))
+//
 #ifdef CUCLARK_LIGHT
-  #define HTSIZE          57777779
+  #ifndef HTSIZE
+    #define HTSIZE          57777779
+  #endif
   #define MAXHITS         23      // max targets per object (light)
   #define RESERVED        300000000 // reserved GPU memory per batch (light)
-  #define DBPARTSPERDEVICE 1
+  #ifndef DBPARTSPERDEVICE
+    #define DBPARTSPERDEVICE 1
+  #endif
+#elif defined(CUCLARK_MEDIUM)
+  #ifndef HTSIZE
+    #define HTSIZE          104395303   // ~2.5 GB, fits 8 GB+ RAM
+  #endif
+  #define MAXHITS         15      // max targets per object
+  #define RESERVED        300000000 // reserved GPU memory per batch
+  #ifndef DBPARTSPERDEVICE
+    #define DBPARTSPERDEVICE 1
+  #endif
 #else
-  #define HTSIZE          1610612741
+  #ifndef HTSIZE
+    #define HTSIZE          1610612741  // ~38.6 GB, needs 48 GB+ RAM
+  #endif
   #define MAXHITS         15      // max targets per object (full)
   #define RESERVED        400000000 // reserved GPU memory per batch (full)
-  #define DBPARTSPERDEVICE 3
+  #ifndef DBPARTSPERDEVICE
+    #define DBPARTSPERDEVICE 3
+  #endif
 #endif
 ////
 
