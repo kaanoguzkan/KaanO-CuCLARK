@@ -1,70 +1,104 @@
 #!/bin/bash
 set -euo pipefail
 
-# ── Test script for example.fasta ────────────────────────────────────────
-# Tests uniques.fasta by:
-#   1. Generating simulated reads from it
-#   2. Extracting target genomes from the input
-#   3. Classifying the reads with cuCLARK
-#   4. Showing a summary of results
+# ── Real-world MWE for cuCLARK ──────────────────────────────────────────
+# Demonstrates a realistic metagenomic classification workflow using
+# uniques.fasta (pathogen reference genomes):
+#   1. Splits uniques.fasta into per-accession target genomes
+#   2. Simulates reads from one organism (E. coli K-12)
+#   3. Builds a cuCLARK database from all targets
+#   4. Classifies the reads and evaluates species-level accuracy
 #
-# Expects uniques.fasta to be provided via $2 or the FASTA env var.
-# The file is NOT baked into the Docker image — mount it at runtime.
+# The input FASTA contains these organisms:
+#   NC_000913.3   Escherichia coli K-12 MG1655
+#   NC_007795.1   Staphylococcus aureus NCTC 8325
+#   NC_002516.2   Pseudomonas aeruginosa PAO1
+#   NC_017564.1   Yersinia enterocolitica Y11
+#   NC_017565.1   Yersinia enterocolitica Y11 plasmid pYV03
+#   NZ_UHII01000002.1  Tsukamurella pulmonis NCTC13230
+#   NZ_UHII01000001.1  Tsukamurella pulmonis NCTC13230
+#   NZ_LR134352.1 Nocardia asteroides NCTC11293
 #
 # Usage (inside Docker container):
 #   docker run --gpus all \
 #     -v /path/to/uniques.fasta:/data/uniques.fasta \
-#     -v $(pwd):/data cuclark \
-#     bash /opt/cuclark/mwe/test_example_fasta.sh /data/test_example /data/uniques.fasta
+#     cuclark bash /opt/cuclark/mwe/test_example_fasta.sh /data/mwe_test /data/uniques.fasta
 #
-# Or from the repo root:
-#   bash mwe/test_example_fasta.sh [DATA_DIR] [FASTA_PATH]
-#
-# Default DATA_DIR: /data/test_example
+# Default DATA_DIR: /data/mwe_test
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-DATA_DIR="${1:-/data/test_example}"
+DATA_DIR="${1:-/data/mwe_test}"
 FASTA="${2:-${FASTA:-$SCRIPT_DIR/uniques.fasta}}"
 
-# Tunable parameters (override via env vars):
-#   NUM_TARGETS  — how many genomes to extract as classification targets (default: 5)
-#   NUM_READS    — how many simulated reads to generate (default: 200)
-#   The input FASTA has 35,396 sequences. More targets = bigger DB = more RAM.
-NUM_TARGETS="${NUM_TARGETS:-5}"
-NUM_READS="${NUM_READS:-200}"
+# Which accession to simulate reads from (ground truth)
+READ_SOURCE="${READ_SOURCE:-NC_000913.3}"
 
-mkdir -p "$DATA_DIR"
+# Tunable parameters
+NUM_READS="${NUM_READS:-200}"
+READ_LEN="${READ_LEN:-150}"
 
 if [ ! -f "$FASTA" ]; then
 	echo "ERROR: FASTA file not found at $FASTA"
-	echo "       Provide the path as the second argument or mount it into the container."
+	echo "       Provide the path as the second argument or set the FASTA env var."
 	exit 1
 fi
 
-echo "============================================================"
-echo "  CuCLARK Test: uniques.fasta"
-echo "  Input:            $FASTA"
-echo "  Output directory: $DATA_DIR"
-echo "============================================================"
-echo ""
-
 mkdir -p "$DATA_DIR/genomes" "$DATA_DIR/db"
 
-# ── Step 1: Generate simulated reads ─────────────────────────────────────
+echo "============================================================"
+echo "  cuCLARK Real-World MWE"
+echo "  Input FASTA:      $FASTA"
+echo "  Output directory: $DATA_DIR"
+echo "  Read source:      $READ_SOURCE"
+echo "  Reads:            $NUM_READS × ${READ_LEN}bp"
+echo "============================================================"
 echo ""
-echo "[1/4] Generating simulated reads from uniques.fasta..."
 
-# Extract reads from non-N-rich regions of the FASTA using awk
-# Concatenates sequence lines (skipping headers), then extracts
-# non-overlapping 150bp windows that have <10% N content.
-awk -v rl=150 -v num_reads="$NUM_READS" -v outfile="$DATA_DIR/reads.fa" '
-BEGIN { seq = ""; limit = 1000000 }
-!/^>/ {
-    seq = seq $0
-    if (length(seq) > limit && limit < num_reads * 1000)
-        limit = num_reads * 1000
-    if (length(seq) > limit) exit
+# ── Step 1: Split FASTA into per-accession target files ────────────────
+echo "[1/5] Splitting input FASTA into per-accession targets..."
+
+rm -f "$DATA_DIR/genomes/"*.fna
+
+awk -v out_dir="$DATA_DIR/genomes" '
+/^>/ {
+    if (outfile) close(outfile)
+    acc = substr($1, 2)
+    outfile = out_dir "/" acc ".fna"
+    count++
 }
+outfile { print > outfile }
+END { print count }
+' "$FASTA" | read -r TARGET_COUNT || true
+
+# Count what we got
+TARGET_COUNT=$(ls "$DATA_DIR/genomes/"*.fna 2>/dev/null | wc -l | tr -d ' ')
+echo "  Extracted $TARGET_COUNT target genomes:"
+for f in "$DATA_DIR/genomes/"*.fna; do
+	acc=$(basename "$f" .fna)
+	size=$(wc -c < "$f" | tr -d ' ')
+	echo "    $acc ($(( size / 1024 )) KB)"
+done
+
+# Verify read source exists
+SOURCE_FASTA="$DATA_DIR/genomes/${READ_SOURCE}.fna"
+if [ ! -f "$SOURCE_FASTA" ]; then
+	echo ""
+	echo "  ERROR: Read source accession $READ_SOURCE not found in input FASTA."
+	echo "  Available accessions:"
+	ls "$DATA_DIR/genomes/"*.fna | xargs -I{} basename {} .fna | sed 's/^/    /'
+	exit 1
+fi
+echo ""
+
+# ── Step 2: Simulate reads from one organism ───────────────────────────
+echo "[2/5] Simulating $NUM_READS reads (${READ_LEN}bp) from $READ_SOURCE..."
+
+READS_FILE="$DATA_DIR/reads.fa"
+
+awk -v rl="$READ_LEN" -v num_reads="$NUM_READS" -v outfile="$READS_FILE" \
+    -v src="$READ_SOURCE" '
+BEGIN { seq = "" }
+!/^>/ { seq = seq $0 }
 END {
     srand(42)
     written = 0; attempts = 0; max_att = num_reads * 20
@@ -74,82 +108,36 @@ END {
         start = int(rand() * (seqlen - rl)) + 1
         rd = substr(seq, start, rl)
         if (length(rd) < rl) continue
-        # Count Ns
         n = gsub(/[Nn]/, "&", rd)
         if (n > rl * 0.1) continue
-        printf ">example_read_%d pos=%d\n%s\n", written, start-1, rd > outfile
+        printf ">read_%d src=%s pos=%d\n%s\n", written, src, start-1, rd > outfile
         written++
     }
-    printf "  Generated %d reads (%d bp each) from informative regions\n", written, rl
-    if (written < num_reads)
-        printf "  WARN: Only found %d/%d reads with <10%% N content\n", written, num_reads
-}' "$FASTA"
+    printf "  Generated %d reads from %s (%d bp genome)\n", written, src, seqlen
+}' "$SOURCE_FASTA"
 
-NUM_READS=$(grep -c "^>" "$DATA_DIR/reads.fa")
-if [ "$NUM_READS" -eq 0 ]; then
-	echo "  ERROR: No reads generated. The file may contain only N's."
-	exit 1
-fi
-echo "  Total reads in $DATA_DIR/reads.fa: $NUM_READS"
-
-# ── Step 2: Extract target genomes from input FASTA ──────────────────────
+ACTUAL_READS=$(grep -c "^>" "$READS_FILE")
+echo "  Total reads: $ACTUAL_READS"
 echo ""
-echo "[2/4] Extracting target genomes from input FASTA..."
 
-# Clean previous genome files to avoid stale targets
-rm -f "$DATA_DIR/genomes/"*.fna
+# ── Step 3: Create targets file ────────────────────────────────────────
+echo "[3/5] Creating targets file..."
 
-# Extract first N target genomes using awk (fast, no Python needed)
-TARGET_COUNT=$(awk -v n="$NUM_TARGETS" -v out_dir="$DATA_DIR/genomes" '
-/^>/ {
-    if (outfile) close(outfile)
-    count++
-    if (count > n) exit
-    acc = substr($1, 2)
-    outfile = out_dir "/" acc ".fna"
-}
-outfile { print > outfile }
-END { print (count < n ? count : n) }
-' "$FASTA")
-
-echo "  Extracted $TARGET_COUNT target sequences from input FASTA"
-
-# ── Step 3: Create targets file and run classification ────────────────────
-echo ""
-echo "[3/4] Creating targets file..."
-
-# Clean stale DB so it rebuilds from current targets
 rm -rf "$DATA_DIR/db/"*
-
 > "$DATA_DIR/targets.txt"
 for f in "$DATA_DIR/genomes/"*.fna; do
-	name=$(basename "$f" .fna)
-	echo "$f	$name" >> "$DATA_DIR/targets.txt"
+	acc=$(basename "$f" .fna)
+	echo "$f	$acc" >> "$DATA_DIR/targets.txt"
 done
 
 NUM_TGT=$(wc -l < "$DATA_DIR/targets.txt" | tr -d ' ')
 echo "  Created targets.txt with $NUM_TGT targets"
-
-# ── Step 3b: Run classification ───────────────────────────────────────────
 echo ""
-echo "[3/4] Running cuCLARK classification..."
 
-# ── Auto-detect system resources and select best variant ──
-#
-# HTSIZE formula:
-#   HTSIZE = largest_prime_below( (RAM_GB - 4) * 1e9 / 24 )
-#   Hash table alloc = HTSIZE × 24 bytes
-#   Max k-mer length = floor(log4(HTSIZE)) + 16
-#
-#   Variant      | HTSIZE (prime)  | HT alloc | Max k | Min RAM
-#   -------------|-----------------|----------|-------|--------
-#   cuCLARK-l    |    57,777,779   |  1.4 GB  |  27   |   4 GB
-#   cuCLARK      | 1,610,612,741   | 38.6 GB  |  31   |  48 GB
-#
-# VRAM formula:
-#   VRAM per batch ≈ DB_size / num_batches + RESERVED (300-400 MB)
-#   Batches = ceil(total_VRAM_need / (VRAM - RESERVED))
+# ── Step 4: Run cuCLARK classification ─────────────────────────────────
+echo "[4/5] Running cuCLARK classification..."
 
+# Auto-detect resources
 RAM_KB=$(awk '/MemTotal/{print $2}' /proc/meminfo 2>/dev/null || echo 0)
 RAM_GB=$((RAM_KB / 1024 / 1024))
 
@@ -159,9 +147,9 @@ if command -v nvidia-smi &>/dev/null; then
 fi
 VRAM_GB=$((VRAM_MB / 1024))
 
-echo "  Detected: ${RAM_GB} GB RAM, ${VRAM_GB} GB VRAM"
+echo "  System: ${RAM_GB} GB RAM, ${VRAM_GB} GB VRAM"
 
-# Select variant based on available RAM
+# Select variant
 VARIANT=""
 KMER=31
 RESERVED_MB=400
@@ -169,7 +157,6 @@ RESERVED_MB=400
 if [ "$RAM_GB" -ge 48 ] && command -v cuCLARK &>/dev/null; then
 	VARIANT="cuCLARK"
 	LABEL="full"
-	RESERVED_MB=400
 elif command -v cuCLARK-l &>/dev/null; then
 	VARIANT="cuCLARK-l"
 	LABEL="light"
@@ -178,81 +165,86 @@ elif command -v cuCLARK-l &>/dev/null; then
 elif command -v cuCLARK &>/dev/null; then
 	VARIANT="cuCLARK"
 	LABEL="full (forced, may OOM)"
-	RESERVED_MB=400
 fi
 
-# Calculate optimal batch count from VRAM
-# More batches = less VRAM per batch, but slower
+# Calculate batches from VRAM
 if [ "$VRAM_MB" -gt 0 ]; then
 	USABLE_VRAM_MB=$((VRAM_MB - RESERVED_MB))
-	if [ "$USABLE_VRAM_MB" -le 0 ]; then
-		USABLE_VRAM_MB=512
-	fi
-	# Estimate: with small DBs 1 batch is fine; scale up for larger DBs
-	# DB size ≈ num_targets × avg_genome_size × 24 bytes / HTSIZE_fill_ratio
-	# For safety, use at least ceil(2048 / USABLE_VRAM_MB) batches
+	[ "$USABLE_VRAM_MB" -le 0 ] && USABLE_VRAM_MB=512
 	BATCHES=$(( (2048 + USABLE_VRAM_MB - 1) / USABLE_VRAM_MB ))
-	if [ "$BATCHES" -lt 1 ]; then BATCHES=1; fi
-	if [ "$BATCHES" -gt 16 ]; then BATCHES=16; fi
+	[ "$BATCHES" -lt 1 ] && BATCHES=1
+	[ "$BATCHES" -gt 16 ] && BATCHES=16
 else
 	BATCHES=4
 fi
 
 if [ -n "$VARIANT" ]; then
-	echo "  Selected: $VARIANT ($LABEL), k=$KMER, batches=$BATCHES"
+	echo "  Variant: $VARIANT ($LABEL), k=$KMER, batches=$BATCHES"
 	echo ""
 	$VARIANT -k "$KMER" \
 		-T "$DATA_DIR/targets.txt" \
 		-D "$DATA_DIR/db/" \
-		-O "$DATA_DIR/reads.fa" \
+		-O "$READS_FILE" \
 		-R "$DATA_DIR/results" \
 		-n 1 -b "$BATCHES" -d 1
 else
 	echo "  SKIP: No cuCLARK binary found (not inside Docker container?)"
-	echo "  To run classification, build and run inside the Docker container:"
-	echo "    docker build -t cuclark ."
-	echo "    docker run --gpus all -v \$(pwd):/data cuclark bash /data/test_example_fasta.sh"
 	echo ""
-	echo "  Steps 1-3 passed. Classification skipped."
+	echo "  Steps 1-3 passed. To run classification:"
+	echo "    docker build -t cuclark ."
+	echo "    docker run --gpus all \\"
+	echo "      -v /path/to/uniques.fasta:/data/uniques.fasta \\"
+	echo "      cuclark bash /opt/cuclark/mwe/test_example_fasta.sh"
 	exit 0
 fi
 
-# ── Step 4: Show results ─────────────────────────────────────────────────
+# ── Step 5: Evaluate results ───────────────────────────────────────────
 echo ""
-echo "[4/4] Results summary:"
+echo "[5/5] Evaluating classification results..."
 echo ""
 
 RESULTS_CSV="$DATA_DIR/results.csv"
-if [ -f "$RESULTS_CSV" ]; then
-	if command -v cuclark &>/dev/null; then
-		cuclark summary "$RESULTS_CSV"
-	else
-		# Manual summary fallback
-		TOTAL=$(grep -cv "^#\|^Object" "$RESULTS_CSV" || true)
-		CLASSIFIED=$(awk -F',' '$2 != "NA" && !/^#/ && !/^Object/' "$RESULTS_CSV" | wc -l | tr -d ' ')
-		echo "  Total reads:  $TOTAL"
-		echo "  Classified:   $CLASSIFIED"
-		echo "  Results file: $RESULTS_CSV"
-	fi
+if [ ! -f "$RESULTS_CSV" ]; then
+	echo "  ERROR: Results file not found at $RESULTS_CSV"
+	exit 1
+fi
 
-	# Sanity check: reads should mostly classify since targets come from the same file
-	TOTAL=$(grep -cv "^#\|^Object" "$RESULTS_CSV" || true)
-	CLASSIFIED_COUNT=$(awk -F',' '$4 != "NA" && !/^#/ && !/^Object/' "$RESULTS_CSV" | wc -l | tr -d ' ')
-	echo ""
-	echo "  Sanity check: $CLASSIFIED_COUNT / $TOTAL reads classified"
-	if [ "$CLASSIFIED_COUNT" -gt 0 ]; then
-		echo "  PASS: Reads are being classified against extracted targets"
-	else
-		echo "  WARN: No reads classified — targets may not overlap with sampled reads"
-	fi
+TOTAL=$(grep -cv "^#\|^Object" "$RESULTS_CSV" || true)
+CLASSIFIED=$(awk -F',' '$4 != "NA" && !/^#/ && !/^Object/' "$RESULTS_CSV" | wc -l | tr -d ' ')
+CORRECT=$(awk -F',' -v expected="$READ_SOURCE" \
+	'$4 == expected && !/^#/ && !/^Object/' "$RESULTS_CSV" | wc -l | tr -d ' ')
+UNCLASSIFIED=$((TOTAL - CLASSIFIED))
+
+# Confidence stats
+HIGH_CONF=$(awk -F',' '!/^#/ && !/^Object/ && $NF+0 >= 0.90' "$RESULTS_CSV" | wc -l | tr -d ' ')
+
+echo "  Ground truth: all reads from $READ_SOURCE"
+echo ""
+echo "  Total reads:       $TOTAL"
+echo "  Classified:        $CLASSIFIED ($(( CLASSIFIED * 100 / TOTAL ))%)"
+echo "  Unclassified:      $UNCLASSIFIED"
+echo "  Correct species:   $CORRECT / $CLASSIFIED ($(( CLASSIFIED > 0 ? CORRECT * 100 / CLASSIFIED : 0 ))%)"
+echo "  High confidence:   $HIGH_CONF (≥0.90)"
+
+# Per-species breakdown
+echo ""
+echo "  Classification breakdown:"
+awk -F',' '!/^#/ && !/^Object/ && $4 != "NA" {count[$4]++}
+END {for (sp in count) printf "    %-40s %d\n", sp, count[sp]}' "$RESULTS_CSV" | sort -t' ' -k2 -rn
+
+echo ""
+if [ "$CORRECT" -eq "$CLASSIFIED" ] && [ "$CLASSIFIED" -gt 0 ]; then
+	echo "  PASS: All classified reads correctly assigned to $READ_SOURCE"
+elif [ "$CLASSIFIED" -gt 0 ] && [ "$CORRECT" -gt $((CLASSIFIED * 90 / 100)) ]; then
+	echo "  PASS: >90% of classified reads correctly assigned"
 else
-	echo "  WARN: Results file not found at $RESULTS_CSV"
+	echo "  WARN: Classification accuracy lower than expected"
 fi
 
 echo ""
 echo "============================================================"
-echo "  Test complete!"
-echo "  Input FASTA: $FASTA"
-echo "  Reads:       $DATA_DIR/reads.fa ($NUM_READS reads)"
+echo "  MWE complete!"
+echo "  References:  $TARGET_COUNT genomes from uniques.fasta"
+echo "  Reads:       $ACTUAL_READS reads from $READ_SOURCE"
 echo "  Results:     $RESULTS_CSV"
 echo "============================================================"
