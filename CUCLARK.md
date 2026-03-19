@@ -8,48 +8,34 @@ Two variants are available:
 - **cuCLARK** — full, requires large RAM (~40 GB for bacterial DB) and VRAM
 - **cuCLARK-l** — light, low-memory (~4 GB RAM, 1 GB VRAM)
 
-CuCLARK uses **canonical k-mers**, so its databases are NOT compatible with original CLARK.
-
 ## 1. Docker Image
 
 ```
 alkanlab/cuclark:latest
 ```
 
-This is a custom image built from CuCLARK source with CUDA 11.4. It supports GPUs from Kepler (K20, sm_35) to Hopper (H100, sm_90).
+Custom image built from CuCLARK source with CUDA 11.4. Supports GPUs from Kepler (K20, sm_35) to RTX 3070 (sm_86).
 
 ## 2. Docker Compose
-
-Create a `docker-compose.yml`:
 
 ```yaml
 services:
   rica_s_id_cuclark:
     container_name: rica_s_id_cuclark
-
     entrypoint:
       - /bin/bash
-
     hostname: rica_s_id_cuclark
-
-    image: alkanlab/cuclark:latest
-
+    image: alkanlab/rica_s_id_cuclark:latest
     ipc: private
-
     logging:
       driver: json-file
       options: {}
-
     networks:
       - rica_s_net
-
     stdin_open: true
-
     tty: true
-
     volumes:
-      - /path/to/your/project:/rica_s
-
+      - /home/ricardo/projects/rica_s:/rica_s
     deploy:
       resources:
         reservations:
@@ -60,41 +46,29 @@ services:
 
 networks:
   rica_s_net:
-```
+    external: true
 
-Replace `/path/to/your/project` with the directory containing your data.
+Replace `/home/ricardo/projects/rica_s` with the directory containing your data.
 
-## 3. Data Setup
+## 3. Running with `docker run` (pulling from Docker Hub)
 
-Organize your data under the project directory before starting:
-
-```
-your_project/
-  data/
-    DB/
-      Custom/
-        references.fasta   # Reference genomes
-    reads/
-      sample.fastq         # Reads to classify
-    results/               # Classification output will go here
-```
-
-## 4. How to run CuCLARK
-
-### Pull the image and start the container
+If you pull the image directly, use `-v` to mount your current directory:
 
 ```bash
-docker compose up -d
-docker exec -it rica_s_id_cuclark bash
+docker run --gpus all -it -v $(pwd):/data alkanlab/cuclark:latest
 ```
 
-### Inside the container
+- Your current folder is mounted at `/data` inside the container
+- Any results written to `/data` appear in your current folder on the host
+- The container drops you into a bash shell
 
-#### Step 1: Build the database
+## 4. How to Run CuCLARK
+
+### Step 1: Build the database
 
 ```bash
 cd /opt/cuclark/scripts
-./set_targets.sh /rica_s/data/DB custom --species
+./set_targets.sh /data/DB custom --species
 ```
 
 This will:
@@ -104,53 +78,33 @@ This will:
 
 Available taxonomy ranks: `--species` (default), `--genus`, `--family`, `--order`, `--class`, `--phylum`.
 
-#### Step 2: Classify reads
+For standard NCBI databases:
+```bash
+./set_targets.sh /data/DB bacteria
+./set_targets.sh /data/DB bacteria viruses human
+```
+
+### Step 2: Classify reads
 
 **cuCLARK-l** (light, recommended for limited GPU memory):
 
 ```bash
-./classify_metagenome.sh -O /rica_s/data/reads/sd_0001.fastq -R /rica_s/data/results/sample -n <threads> -b <batches> --light
+./classify_metagenome.sh -O /data/reads/sample.fastq -R /data/results/sample -n <threads> -b <batches> --light
 ```
 
-**cuCLARK** (full, requires large RAM and VRAM):
+**cuCLARK** (full, requires ~40 GB RAM for bacterial DB):
 
 ```bash
-./classify_metagenome.sh -O /rica_s/data/reads/sd_0001.fastq -R /rica_s/data/results/sample -n <threads> -b <batches>
+./classify_metagenome.sh -O /data/reads/sample.fastq -R /data/results/sample -n <threads> -b <batches>
 ```
 
-Replace `<threads>` with the number of CPU threads (e.g., 4) and `<batches>` with the number of GPU batches (increase if you get OOM errors, e.g., 4 or 8).
+Replace `<threads>` with CPU thread count (e.g., 4) and `<batches>` with GPU batch count (increase if OOM errors, e.g., 4 or 8).
 
-The first classification run builds the discriminative k-mer database (`.ky`, `.lb`, `.sz` files). This is done once per reference set; subsequent runs reuse it.
+The first run builds the discriminative k-mer database (`.ky`, `.lb`, `.sz` files). Subsequent runs reuse it.
 
-#### Alternative: Using the `cuclark` CLI wrapper
+### Step 3: View results
 
-```bash
-# Auto-selects full/light variant based on available RAM and VRAM
-cuclark classify --reads /rica_s/data/reads/sd_0001.fastq \
-  --targets /rica_s/data/DB/targets.txt \
-  --db-dir /rica_s/data/DB/ \
-  --output /rica_s/data/results/sample
-
-# Force light mode
-cuclark classify --reads /rica_s/data/reads/sd_0001.fastq \
-  --targets /rica_s/data/DB/targets.txt \
-  --db-dir /rica_s/data/DB/ \
-  --output /rica_s/data/results/sample --light
-```
-
-#### Step 3: View results
-
-Results are stored in `data/results/sample.csv`.
-
-**Using the CLI wrapper:**
-
-```bash
-cuclark summary /rica_s/data/results/sample.csv
-cuclark summary /rica_s/data/results/sample.csv --format json
-cuclark summary /rica_s/data/results/sample.csv --min-confidence 0.90
-```
-
-**Output Format:**
+Results are stored in `results/sample.csv`. CSV format:
 
 | Column | Description |
 |--------|-------------|
@@ -163,7 +117,7 @@ cuclark summary /rica_s/data/results/sample.csv --min-confidence 0.90
 | hit count of second | k-mer count for 2nd assignment |
 | confidence | score1 / (score1 + score2) |
 
-### Parameters
+## 6. Parameters Reference
 
 | Flag | Description |
 |------|-------------|
@@ -180,3 +134,26 @@ cuclark summary /rica_s/data/results/sample.csv --min-confidence 0.90
 | `--tsk` | Create detailed target-specific k-mer files |
 | `--extended` | Extended output with hit counts for all targets |
 | `--gzipped` | Input files are gzipped |
+
+## 7. System Requirements
+
+| Resource | cuCLARK (full) | cuCLARK-l (light) |
+|----------|---------------|-------------------|
+| RAM | ~146 GB to build DB, ~40 GB to classify | 4 GB |
+| VRAM | As much as possible (tested with 6 GB) | 1 GB minimum |
+| GPU | CUDA compute capability 3.0+ | CUDA compute capability 3.0+ |
+| CUDA | Tested with 7.5+, image uses 11.4 | Same |
+
+## 8. Scripts in the Image
+
+| Script | Location | Purpose |
+|--------|----------|---------|
+| `set_targets.sh` | `/opt/cuclark/scripts/` | Build database targets from reference genomes |
+| `classify_metagenome.sh` | `/opt/cuclark/scripts/` | Run classification |
+| `download_data.sh` | `/opt/cuclark/scripts/` | Download bacteria/viruses/human from NCBI |
+| `download_data_newest.sh` | `/opt/cuclark/scripts/` | Download newest RefSeq genomes |
+| `download_data_release.sh` | `/opt/cuclark/scripts/` | Download latest RefSeq release |
+| `download_taxondata.sh` | `/opt/cuclark/scripts/` | Download NCBI taxonomy data |
+| `clean.sh` | `/opt/cuclark/scripts/` | Delete all database data |
+| `resetCustomDB.sh` | `/opt/cuclark/scripts/` | Reset custom database targets |
+| `updateTaxonomy.sh` | `/opt/cuclark/scripts/` | Update taxonomy data from NCBI |

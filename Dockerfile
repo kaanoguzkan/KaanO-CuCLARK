@@ -52,8 +52,6 @@ COPY --from=builder /usr/local/exe/cuCLARK-l      /usr/local/bin/cuCLARK-l
 COPY --from=builder /usr/local/exe/getTargetsDef  /usr/local/bin/getTargetsDef
 COPY --from=builder /usr/local/exe/getAccssnTaxID /usr/local/bin/getAccssnTaxID
 COPY --from=builder /usr/local/exe/getfilesToTaxNodes /usr/local/bin/getfilesToTaxNodes
-COPY --from=builder /usr/local/bin/cuclark        /usr/local/bin/cuclark
-
 COPY scripts/ /opt/cuclark/scripts/
 COPY mwe/ /opt/cuclark/mwe/
 
@@ -61,8 +59,7 @@ COPY mwe/ /opt/cuclark/mwe/
 RUN sed -i 's/\r$//' /opt/cuclark/scripts/* /opt/cuclark/mwe/* \
     && chmod +x /opt/cuclark/scripts/* /opt/cuclark/mwe/*.sh
 
-# Add shell scripts to PATH so wrapper can find them
+# Add scripts and binaries to PATH
 ENV PATH="/opt/cuclark/scripts:${PATH}"
 
 WORKDIR /data
-ENTRYPOINT ["cuclark"]

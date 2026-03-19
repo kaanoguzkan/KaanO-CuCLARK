@@ -70,15 +70,8 @@ add_executable(getfilesToTaxNodes src/getfilesToTaxNodes.cc src/file.cc)
 target_compile_options(getfilesToTaxNodes PRIVATE -O3)
 
 # ------------------------------------------------------------------
-# cuclark CLI wrapper (C++17, replaces Python script)
-# ------------------------------------------------------------------
-add_executable(cuclark src/cuclark_cli.cc)
-target_compile_options(cuclark PRIVATE -O3)
-
-# ------------------------------------------------------------------
 # Install — copies binaries to exe/ to preserve backward compatibility
 # ------------------------------------------------------------------
 install(TARGETS cuCLARK cuCLARK-l getTargetsDef getAccssnTaxID getfilesToTaxNodes
     RUNTIME DESTINATION exe
 )
-install(TARGETS cuclark RUNTIME DESTINATION bin)
